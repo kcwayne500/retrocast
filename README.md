@@ -143,7 +143,7 @@ python -m unittest discover -s tests -v
 
 ## Included assets and licensing
 
-The demo MP4 came from the supplied prototype handoff; its original creation and license have not been independently established. It is tracked so fresh clones can run the demonstration. No project license has been assigned. Confirm source and asset rights before public distribution. Personal TV photos, handoff archives, credentials, and downloaded videos are excluded from this repository.
+The bundled demo is a generated SMPTE color-bar test card with a synthesized 440 Hz tone. It contains no third-party video or recorded audio. See `docs/DEMO.md` for the generation command. No project license has been assigned. Inter and Tailwind retain their included third-party licenses. Personal TV photos, handoff archives, credentials, and downloaded videos are excluded from this repository.
 
 ## UI styling
 

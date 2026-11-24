@@ -53,7 +53,7 @@ HackTV uses `-m m` for modulated NTSC-M (not `-m ntsc`, which is unmodulated bas
 hacktv -o hackrf -m m -s 13500000 -f 61250000 -g 0 -r /path/to/media/video.mp4
 ```
 
-To enable RF mode, copy `.env.example` to `.env`, then set `RETROCAST_RF_ENABLED=1`. Restart RetroCast. The UI will also ask you to confirm the RF bench setup every time you start transmission. The app forces **TX VGA gain 0 dB** and does **not** enable the HackRF amplifier. These settings are *not* a guarantee of RF compliance or receiver safety.
+To enable RF mode, copy `.env.example` to `.env`, then set `RETROCAST_RF_ENABLED=1`. Restart RetroCast. The UI will also ask you to confirm the RF bench setup every time you start transmission. The app defaults to **TX VGA gain 0 dB** with the internal RF amplifier **off**. Explicit server configuration `RETROCAST_TX_GAIN` (0–47 dB) and `RETROCAST_TX_AMP` (0/1) controls these settings. For the confirmed shielded chamber setup, 47 and 1 select the maximum hardware gain settings. This does not specify or measure output wattage, and maximum gain may distort the TV signal. See [HackRF gain controls](https://hackrf.readthedocs.io/en/latest/setting_gain.html). These settings are *not* a guarantee of RF compliance or receiver safety.
 
 ### RF safety / legal limits
 
@@ -144,3 +144,15 @@ python -m unittest discover -s tests -v
 ## Included assets and licensing
 
 The demo MP4 came from the supplied prototype handoff; its original creation and license have not been independently established. It is tracked so fresh clones can run the demonstration. No project license has been assigned. Confirm source and asset rights before public distribution. Personal TV photos, handoff archives, credentials, and downloaded videos are excluded from this repository.
+
+## UI styling
+
+The studio uses Tailwind CSS 4.3.5 and the Inter variable font. The compiled stylesheet and font are served locally, so normal startup needs no Node installation, CSS build step, or CDN connection.
+
+To change the design, edit `templates/index.html`, `static/app.js`, or `styles/input.css`. Download the appropriate [Tailwind standalone CLI v4.3.5](https://github.com/tailwindlabs/tailwindcss/releases/tag/v4.3.5) for your development machine, then rebuild from the repository root:
+
+```sh
+tailwindcss -i styles/input.css -o static/style.css --minify
+```
+
+Commit the generated `static/style.css` along with your source changes. `static/inter.woff2` comes from [Inter](https://github.com/rsms/inter); its SIL Open Font License and Tailwind's MIT license are included in `licenses/`.

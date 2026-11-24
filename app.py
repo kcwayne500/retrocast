@@ -51,6 +51,10 @@ HOST = os.environ.get('RETROCAST_HOST', '127.0.0.1')
 PORT = int(os.environ.get('RETROCAST_PORT', '8765'))
 TX_ENABLED = env_bool('RETROCAST_RF_ENABLED')
 HACKTV_BIN = os.environ.get('RETROCAST_HACKTV_BIN', 'hacktv')
+TX_GAIN = int(os.environ.get('RETROCAST_TX_GAIN', '0'))
+if not 0 <= TX_GAIN <= 47:
+    raise ValueError('RETROCAST_TX_GAIN must be between 0 and 47 dB')
+TX_AMP = env_bool('RETROCAST_TX_AMP')
 MEDIA_DIR_RAW = Path(os.environ.get('RETROCAST_MEDIA_DIR', 'media')).expanduser()
 MEDIA_DIR = (MEDIA_DIR_RAW if MEDIA_DIR_RAW.is_absolute() else ROOT / MEDIA_DIR_RAW).resolve()
 MEDIA_DIR.mkdir(parents=True, exist_ok=True)
@@ -118,6 +122,7 @@ def state_snapshot():
         return {'status': 'playing' if _active else 'idle',
                 'active': dict(_active) if _active else None,
                 'error': _error, 'rf_enabled': TX_ENABLED,
+                'tx_gain_db': TX_GAIN, 'tx_amp_enabled': TX_AMP,
                 'hacktv_found': binary_found(HACKTV_BIN),
                 'ffmpeg_found': binary_found('ffmpeg'),
                 'yt_dlp_found': yt_dlp_available(),
@@ -244,9 +249,12 @@ def play_command(data):
     cmd = None
     if mode == 'rf':
         # -m m = complex/modulated NTSC-M; -s 13.5M is documented NTSC sample rate.
-        # Fixed minimum TX VGA gain; DO NOT engage the optional RF amplifier (-a).
+        # Gain and RF amplifier require explicit server configuration; default to minimum.
         cmd = [HACKTV_BIN, '-o', 'hackrf', '-m', 'm', '-s', '13500000',
-               '-f', str(CHANNELS[channel]), '-g', '0']
+               '-f', str(CHANNELS[channel]), '-g', str(TX_GAIN)]
+        if TX_AMP:
+            cmd.append('-a')
+        info.update(tx_gain_db=TX_GAIN, tx_amp_enabled=TX_AMP)
         if repeat:
             cmd.append('-r')
         cmd.append(source_arg)
@@ -264,7 +272,7 @@ def start_playback(data):
             _active = info
         log(f"Browser preview: {info['name']} (no radio signal)")
         return info
-    log(f"Starting HackTV on channel {info['channel']}, 0 dB TX gain, amplifier OFF")
+    log(f"Starting HackTV on channel {info['channel']}, {TX_GAIN} dB TX gain, amplifier {'ON' if TX_AMP else 'OFF'}")
     kwargs = {'cwd': ROOT, 'stdout': subprocess.PIPE, 'stderr': subprocess.STDOUT,
               'text': True, 'bufsize': 1}
     if os.name == 'nt':
@@ -384,6 +392,8 @@ class RetroCastHandler(BaseHTTPRequestHandler):
         try:
             if path == '/':
                 return self.file_response(ROOT/'templates'/'index.html', 'text/html; charset=utf-8')
+            if path == '/static/inter.woff2':
+                return self.file_response(ROOT/'static'/'inter.woff2', 'font/woff2')
             if path in ('/static/style.css', '/static/app.js'):
                 return self.file_response(ROOT/path.lstrip('/'),
                                           'text/css; charset=utf-8' if path.endswith('css') else 'text/javascript; charset=utf-8')

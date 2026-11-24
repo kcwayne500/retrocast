@@ -14,6 +14,8 @@ import urllib.request
 _TMP = tempfile.TemporaryDirectory()
 os.environ['RETROCAST_MEDIA_DIR'] = _TMP.name
 os.environ['RETROCAST_RF_ENABLED'] = '0'
+os.environ['RETROCAST_TX_GAIN'] = '0'
+os.environ['RETROCAST_TX_AMP'] = '0'
 import app as retro  # noqa: E402
 
 
@@ -122,6 +124,22 @@ class RetrocastTests(unittest.TestCase):
         with retro._lock:
             retro._process=None
             retro._active=None
+
+    @mock.patch.object(retro, 'TX_ENABLED', True)
+    @mock.patch.object(retro, 'binary_found', return_value=True)
+    @mock.patch.object(retro, 'TX_GAIN', 47)
+    @mock.patch.object(retro, 'TX_AMP', True)
+    def test_maximum_tx_command_and_status(self, _binary):
+        info, args = retro.play_command({'mode': 'rf', 'source': 'test', 'bench_confirmed': True})
+        self.assertEqual(args[args.index('-g') + 1], '47')
+        self.assertIn('-a', args)
+        self.assertEqual(info['tx_gain_db'], 47)
+        self.assertTrue(info['tx_amp_enabled'])
+        status = retro.state_snapshot()
+        self.assertEqual(status['tx_gain_db'], 47)
+        self.assertTrue(status['tx_amp_enabled'])
+        preview, command = retro.play_command({'mode': 'preview', 'source': 'test'})
+        self.assertIsNone(command)
 
 if __name__=='__main__':
     unittest.main()

@@ -25,10 +25,11 @@ function setSource(source) {
     const active = item === source;
     $('source'+item[0].toUpperCase()+item.slice(1)).classList.toggle('selected', active);
     $('source'+item[0].toUpperCase()+item.slice(1)).setAttribute('aria-selected', String(active));
+    $('source'+item[0].toUpperCase()+item.slice(1)).tabIndex = active ? 0 : -1;
     $(item+'Content').classList.toggle('hidden', !active);
   }
   if (source === 'test') notice('Built-in color bars selected.');
-  if (source === 'file') $('selectedVideo').textContent = state.selected || 'None — upload or pick from library';
+  if (source === 'file') $('selectedVideo').textContent = state.selected || 'Choose a video from your library';
 }
 function updateFrequency() {
   const ch = $('channel').value;
@@ -37,17 +38,18 @@ function updateFrequency() {
 function updateOutputNotice() {
   const rf = $('outputMode').value === 'rf';
   $('rfCheck').classList.toggle('hidden', !rf);
+  $('startLabel').textContent = rf ? 'Start transmission' : 'Start preview';
   $('outputNotice').classList.toggle('warning', rf);
-  $('outputNotice').innerHTML = rf ? '<span class="notice-mark">!</span><span>HACKRF TX — Must be an authorized RF setup with a properly attenuated, DC-isolated connection. Amplifier stays OFF and TX gain stays at 0 dB.</span>' : '<span class="notice-mark">i</span><span>PREVIEW MODE — No RF signal is transmitted. The video plays in this browser.</span>';
+  $('outputNotice').innerHTML = rf ? '<span class="notice-mark">!</span><span>HACKRF TX — Must be an authorized RF setup with a properly attenuated, DC-isolated connection. TX gain: ' + (state.status?.tx_gain_db ?? 0) + ' dB; RF amplifier: ' + (state.status?.tx_amp_enabled ? 'ON' : 'OFF') + '.</span>' : '<span class="notice-mark">i</span><span>Preview plays in your browser. No RF signal is transmitted.</span>';
 }
 function populateMedia() {
   const el = $('library');
-  $('mediaCount').textContent = `${state.media.length} ITEM${state.media.length === 1 ? '' : 'S'}`;
+  $('mediaCount').textContent = `${state.media.length} file${state.media.length === 1 ? '' : 's'}`;
   if (!state.media.length) {
-    el.innerHTML = '<div class="empty-library">No media added yet. Upload an MP4 or paste a YouTube link.</div>';
+    el.innerHTML = '<div class="empty-library">Your library is waiting. Upload a video or save a YouTube clip.</div>';
     return;
   }
-  el.innerHTML = state.media.map(f => `<div class="media-row ${f.name===state.selected ? 'selected':''}" data-select="${escapeHTML(f.name)}"><div class="media-icon">▶</div><div class="media-desc"><strong title="${escapeHTML(f.name)}">${escapeHTML(f.name)}</strong><small>${bytes(f.size)} · ${new Date(f.modified).toLocaleDateString()}</small></div><button class="delete-media" data-delete="${escapeHTML(f.name)}" title="Delete ${escapeHTML(f.name)}" aria-label="Delete ${escapeHTML(f.name)}">✕</button></div>`).join('');
+  el.innerHTML = state.media.map(f => `<div class="media-row ${f.name===state.selected ? 'selected':''}"><button class="media-select" data-select="${escapeHTML(f.name)}" aria-pressed="${f.name===state.selected}"><span class="media-icon"><svg class="icon size-4" aria-hidden="true"><use href="#icon-film"/></svg></span><span class="media-desc"><strong title="${escapeHTML(f.name)}">${escapeHTML(f.name)}</strong><small>${bytes(f.size)} · ${new Date(f.modified).toLocaleDateString()}</small></span><span class="file-type">${escapeHTML(f.name.split('.').pop())}</span></button><button class="delete-media" data-delete="${escapeHTML(f.name)}" title="Delete ${escapeHTML(f.name)}" aria-label="Delete ${escapeHTML(f.name)}"><svg class="icon size-3.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6m4-6v6"/></svg></button></div>`).join('');
 }
 async function refreshLibrary() {
   const res = await api('/api/media');
@@ -55,7 +57,8 @@ async function refreshLibrary() {
   if (state.selected && !state.media.some(x=>x.name===state.selected)) state.selected=null;
   if (!state.selected && state.media.length) state.selected=state.media[0].name;
   populateMedia();
-  $('selectedVideo').textContent = state.selected || 'None — upload or pick from library';
+  $('selectedVideo').textContent = state.selected || 'Choose a video from your library';
+  $('selectedVideo').title = state.selected || 'No file selected';
 }
 function chooseVideo(filename) {
   state.selected=filename;
@@ -119,19 +122,25 @@ function showMonitor(active) {
 let lastActiveKey='';
 function paintStatus(data) {
   state.status=data;
+  updateOutputNotice();
   const a=data.active;
-  const nextKey=a?`${a.started_at}/${a.name}/${a.mode}`:'';
+  const nextKey=a?`${a.started_at}/${a.name}/${a.mode}/${a.repeat}`:'idle';
   if(lastActiveKey!==nextKey){ showMonitor(a);lastActiveKey=nextKey; }
   $('headDot').classList.toggle('busy',!!a);
-  $('headerStatus').textContent=a?(a.mode==='rf'?'TRANSMITTING':'PREVIEWING'):'SYSTEM READY';
-  $('headerMode').textContent=data.rf_enabled?'RF AVAILABLE':'PREVIEW MODE';
-  $('txLabel').textContent=data.rf_enabled?'ENABLED':'LOCKED';
+  $('headDot').classList.remove('offline');
+  $('serverStatus').innerHTML = '<span class="diag-dot yes"></span>Online';
+  const rfOption = $('outputMode').querySelector('option[value="rf"]');
+  rfOption.disabled = !data.rf_enabled;
+  rfOption.textContent = data.rf_enabled ? 'HackRF TX' : 'RF locked';
+  $('headerStatus').textContent=a?(a.mode==='rf'?'Transmitting':'Previewing'):'Connected';
+  $('headerMode').textContent=data.rf_enabled?'RF available':'Preview mode';
+  $('txLabel').textContent=data.rf_enabled?'Enabled':'Locked';
   $('txLabel').classList.toggle('enabled',data.rf_enabled);
-  const statusMark = (found) => found?'<span class="diag-dot yes"></span> READY':'<span class="diag-dot" style="background:#eaa591"></span> MISSING';
+  const statusMark = (found) => found?'<span class="diag-dot yes"></span>Ready':'<span class="diag-dot"></span>Missing';
   $('hacktvStatus').innerHTML=statusMark(data.hacktv_found);
   $('ffmpegStatus').innerHTML=statusMark(data.ffmpeg_found);
   $('ytdlpStatus').innerHTML=statusMark(data.yt_dlp_found);
-  $('rfStatus').textContent=data.rf_enabled?'UNLOCKED':'LOCKED';
+  $('rfStatus').textContent=data.rf_enabled?'Enabled':'Locked';
   $('rfStatus').classList.toggle('locked',!data.rf_enabled);
   $('logsView').textContent=(data.recent_logs||[]).join('\n')||'(No log entries yet)';
   if (state.lastJob) {
@@ -147,7 +156,7 @@ function paintStatus(data) {
 }
 async function refreshStatus() {
   try { paintStatus(await api('/api/status')); }
-  catch (e) { $('headerStatus').textContent='OFFLINE';$('headDot').classList.add('busy');notice('Server unavailable: '+e.message,'error'); }
+  catch (e) { $('headerStatus').textContent='Offline';$('headDot').classList.add('offline');$('serverStatus').innerHTML='<span class="diag-dot"></span>Offline';notice('Server unavailable: '+e.message,'error'); }
 }
 async function start() {
   const source=state.source==='test'?'test':'file';
@@ -175,7 +184,21 @@ $('uploadZone').addEventListener('click',()=>$('filePicker').click());
 $('uploadZone').addEventListener('dragover',e=>{e.preventDefault();$('uploadZone').classList.add('drag');});
 $('uploadZone').addEventListener('dragleave',()=>$('uploadZone').classList.remove('drag'));
 $('uploadZone').addEventListener('drop',e=>{e.preventDefault();$('uploadZone').classList.remove('drag');uploadFile(e.dataTransfer.files[0]);});
-for(const el of document.querySelectorAll('.source-tab'))el.addEventListener('click',()=>setSource(el.dataset.source));
+for(const el of document.querySelectorAll('.source-tab')) {
+  el.addEventListener('click',()=>setSource(el.dataset.source));
+  el.addEventListener('keydown', event => {
+    const tabs = [...document.querySelectorAll('.source-tab')];
+    let index = tabs.indexOf(el);
+    if (event.key === 'ArrowRight') index = (index + 1) % tabs.length;
+    else if (event.key === 'ArrowLeft') index = (index + tabs.length - 1) % tabs.length;
+    else if (event.key === 'Home') index = 0;
+    else if (event.key === 'End') index = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    setSource(tabs[index].dataset.source);
+    tabs[index].focus();
+  });
+}
 $('channel').addEventListener('change',updateFrequency);
 $('outputMode').addEventListener('change',updateOutputNotice);
 $('startBtn').addEventListener('click',start);$('stopBtn').addEventListener('click',stop);
@@ -183,7 +206,9 @@ $('fetchYoutube').addEventListener('click',fetchYoutube);
 $('refreshBtn').addEventListener('click',()=>refreshLibrary().catch(e=>notice(e.message,'error')));
 $('diagRefresh').addEventListener('click',refreshStatus);
 $('logsToggle').addEventListener('click',()=>{
-  const hidden=$('logsView').classList.toggle('hidden');$('logsToggle').textContent=hidden?'SHOW':'HIDE';
+  const hidden=$('logsView').classList.toggle('hidden');
+  $('logsToggle').setAttribute('aria-expanded', String(!hidden));
+  $('logsToggle').innerHTML=(hidden?'Show':'Hide')+' activity log <span aria-hidden="true">'+(hidden?'+':'−')+'</span>';
 });
 $('library').addEventListener('click',async(e)=>{
   const deleteBtn=e.target.closest('[data-delete]');
